@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
@@ -34,33 +35,32 @@ namespace MindWave
         public event UpdateFloatValueDelegate UpdateLowGammaEvent;
         public event UpdateFloatValueDelegate UpdateHighGammaEvent;
 
+        private bool m_waitForExit = true;
 
         private void Start()
         {
-            Connect();
+            ThreadStart ts = new ThreadStart(Connect);
+            Thread thread = new Thread(ts);
+            thread.Start();
         }
 
         public void Disconnect()
         {
-            if (IsInvoking("ParseData"))
-            {
-                CancelInvoke("ParseData");
-                stream.Close();
-            }
+            stream.Close();
         }
 
         public void Connect()
         {
-            if (!IsInvoking("ParseData"))
+            client = new TcpClient("127.0.0.1", 13854);
+            stream = client.GetStream();
+            buffer = new byte[1024];
+            byte[] myWriteBuffer = Encoding.ASCII.GetBytes(@"{""enableRawOutput"": true, ""format"": ""Json""}");
+            stream.Write(myWriteBuffer, 0, myWriteBuffer.Length);
+
+            while (m_waitForExit)
             {
-
-                client = new TcpClient("127.0.0.1", 13854);
-                stream = client.GetStream();
-                buffer = new byte[1024];
-                byte[] myWriteBuffer = Encoding.ASCII.GetBytes(@"{""enableRawOutput"": true, ""format"": ""Json""}");
-                stream.Write(myWriteBuffer, 0, myWriteBuffer.Length);
-
-                InvokeRepeating("ParseData", 0.1f, 0.02f);
+                ParseData();
+                Thread.Sleep(100);
             }
         }
 
@@ -248,8 +248,15 @@ namespace MindWave
 
         } // end ParseData
 
+        void OnDisable()
+        {
+            m_waitForExit = false;
+            Disconnect();
+        }
+
         private void OnApplicationQuit()
         {
+            m_waitForExit = false;
             Disconnect();
         }
 
